@@ -27,14 +27,16 @@ type Pipe<Start, Finish, Inputs extends [Start, ...any[]], Outputs extends any[]
 	[I in keyof Inputs]: DuplexConstructor<Inputs[I], GetValueOrDefault<Outputs, I, Finish>>
 }
 
-export function pipe<F, L, P extends [any, ...any[]]>(
-	source: ReadableConstructor<F>,
-	pipeThrough: Pipe<F, L, P>,
-	pipeTo: WritableConstructor<L>
+export function pipe<F, L, P extends [F, ...any[]]>(
+	...streams: [ReadableConstructor<F>, ...Pipe<F, L, P>, WritableConstructor<L>]
 ): Writable {
+	const source = streams[0]
+	const duplexes = streams.slice(1, -1) as Pipe<F, L, P>
+	const sink = streams[streams.length - 1] as WritableConstructor<L>
+
 	let tail = readable(source)
-	pipeThrough.forEach((dp) => (tail = tail.pipe(duplex(dp))))
-	return tail.pipe(writable(pipeTo))
+	duplexes.forEach((dp) => (tail = tail.pipe(duplex(dp))))
+	return tail.pipe(writable(sink))
 }
 
 function _toWritable<I, O>(
@@ -78,25 +80,3 @@ function _toWritable<I, O>(
 
 	return writable
 }
-
-async function* source() {
-	yield 'hello'
-	yield 'world'
-	yield* ['a', 'b']
-}
-
-async function* transform(input: AsyncIterable<string>) {
-	for await (const x of input) yield [...x].reduce((x, y) => x + y.charCodeAt(0), 0)
-}
-
-async function* transform2(input: AsyncIterable<number>) {
-	for await (const x of input) yield (x / 2 + 1).toString()
-}
-
-async function* sink(input: AsyncIterable<string>) {
-	for await (const x of input) console.log(x)
-}
-
-pipe(source, [transform, transform2], sink)
-
-// readable(source).pipe(duplex(transform)).pipe(duplex(transform2)).pipe(writable(sink))
