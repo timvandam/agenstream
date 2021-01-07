@@ -7,6 +7,7 @@ type AGConstructor<P, T = never> = P extends undefined
 
 export type ReadableConstructor<O> = AGConstructor<undefined, O>
 export type WritableConstructor<I, O = never> = AGConstructor<AsyncIterable<I>, O>
+export type DuplexConstructor<I, O> = WritableConstructor<I, O>
 
 export function readable<I>(generator: ReadableConstructor<I>): Readable {
 	return Readable.from(generator()) as Readable
@@ -16,8 +17,24 @@ export function writable<I>(generator: WritableConstructor<I>): Writable {
 	return _toWritable(generator, Writable)
 }
 
-export function duplex<I, O>(generator: WritableConstructor<I, O>): Duplex {
+export function duplex<I, O>(generator: DuplexConstructor<I, O>): Duplex {
 	return _toWritable(generator, Duplex) as Duplex
+}
+
+type OmitFirst<A extends any[]> = A extends [any, ...infer R] ? R : never
+type GetValueOrDefault<O, K, D = never> = K extends keyof O ? O[K] : D
+type Pipe<F, L, I extends [F, ...any[]], O extends any[] = OmitFirst<I>> = {
+	[K in keyof I]: DuplexConstructor<I[K], GetValueOrDefault<O, K, L>>
+}
+
+export function pipe<F, L, P extends [any, ...any[]]>(
+	source: ReadableConstructor<F>,
+	pipeThrough: Pipe<F, L, P>,
+	pipeTo: WritableConstructor<L>
+): Writable {
+	let tail = readable(source)
+	pipeThrough.forEach((dp) => (tail = tail.pipe(duplex(dp))))
+	return tail.pipe(writable(pipeTo))
 }
 
 function _toWritable<I, O>(
@@ -69,12 +86,17 @@ async function* source() {
 }
 
 async function* transform(input: AsyncIterable<string>) {
-	for await (const x of input) yield x.toUpperCase()
+	for await (const x of input) yield [...x].reduce((x, y) => x + y.charCodeAt(0), 0)
+}
+
+async function* transform2(input: AsyncIterable<number>) {
+	for await (const x of input) yield (x / 2 + 1).toString()
 }
 
 async function* sink(input: AsyncIterable<string>) {
 	for await (const x of input) console.log(x)
 }
 
-readable(source).pipe(duplex(transform)).pipe(writable(sink))
-// TODO: Method to pipe many after each other, auto wrapping the generators
+pipe(source, [transform, transform2], sink)
+
+// readable(source).pipe(duplex(transform)).pipe(duplex(transform2)).pipe(writable(sink))
