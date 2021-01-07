@@ -1,5 +1,5 @@
 import { Duplex, DuplexOptions, Readable, Writable } from 'readable-stream'
-import RemoteControlAsyncIterable from './RemoteControlAsyncIterable'
+import RemoteControlledAsyncIterable from './RemoteControlledAsyncIterable'
 
 type AGConstructor<P, T = never> = P extends undefined
 	? () => AsyncGenerator<T, void, void>
@@ -24,7 +24,7 @@ function _toWritable<I, O>(
 	generator: WritableConstructor<I, O>,
 	Constructor = Writable
 ): InstanceType<typeof Constructor> {
-	const input = new RemoteControlAsyncIterable<I>()
+	const input = new RemoteControlledAsyncIterable<I>()
 	const w = generator(input[Symbol.asyncIterator]())
 
 	const options: DuplexOptions = {
