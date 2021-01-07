@@ -21,10 +21,10 @@ export function duplex<I, O>(generator: DuplexConstructor<I, O>): Duplex {
 	return _toWritable(generator, Duplex) as Duplex
 }
 
-type OmitFirst<A extends any[]> = A extends [any, ...infer R] ? R : never
-type GetValueOrDefault<O, K, D = never> = K extends keyof O ? O[K] : D
-type Pipe<F, L, I extends [F, ...any[]], O extends any[] = OmitFirst<I>> = {
-	[K in keyof I]: DuplexConstructor<I[K], GetValueOrDefault<O, K, L>>
+type OmitFirst<T extends any[]> = T extends [any, ...infer R] ? R : never
+type GetValueOrDefault<Thing, Key, Default = never> = Key extends keyof Thing ? Thing[Key] : Default
+type Pipe<Start, Finish, Inputs extends [Start, ...any[]], Outputs extends any[] = OmitFirst<Inputs>> = {
+	[I in keyof Inputs]: DuplexConstructor<Inputs[I], GetValueOrDefault<Outputs, I, Finish>>
 }
 
 export function pipe<F, L, P extends [any, ...any[]]>(
