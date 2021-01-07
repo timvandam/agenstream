@@ -1,20 +1,22 @@
-import { Duplex, DuplexOptions, Readable, Writable, WritableOptions } from 'readable-stream'
+import { Duplex, DuplexOptions, Readable, Writable } from 'readable-stream'
 import { EventEmitter } from 'events'
 
-type AGConstructor<P, T = never> = P extends undefined ? () => AsyncGenerator<T> : (input: P) => AsyncGenerator<T>
+type AGConstructor<P, T = never> = P extends undefined
+	? () => AsyncGenerator<T, void, void>
+	: (input: P) => AsyncGenerator<T, void, void>
 
 export type ReadableConstructor<O> = AGConstructor<undefined, O>
 export type WritableConstructor<I, O = never> = AGConstructor<ReturnType<ReadableConstructor<I>>, O>
 
-function toReadable<I>(generator: ReadableConstructor<I>): Readable {
+export function readable<I>(generator: ReadableConstructor<I>): Readable {
 	return Readable.from(generator()) as Readable
 }
 
-function toWritable<I>(generator: WritableConstructor<I>): Writable {
+export function writable<I>(generator: WritableConstructor<I>): Writable {
 	return _toWritable(generator, Writable)
 }
 
-function toDuplex<I, O>(generator: WritableConstructor<I, O>): Duplex {
+export function duplex<I, O>(generator: WritableConstructor<I, O>): Duplex {
 	return _toWritable(generator, Duplex) as Duplex
 }
 
@@ -24,29 +26,33 @@ function _toWritable<I, O>(
 ): InstanceType<typeof Constructor> {
 	const chunks: [I, Function][] = []
 	const chunkListener = new EventEmitter()
-	const chunkIsAvailable = () =>
+	const waitForChunk = () =>
 		new Promise<void>((resolve) => {
 			if (chunks.length) return resolve()
 			chunkListener.once('chunk', resolve)
 		})
 
-	const w = generator(
-		(async function* (): AsyncGenerator<I, void, void> {
-			while (true) {
-				await chunkIsAvailable()
-				const [chunk, callback] = chunks[0]
-				chunks.shift()
-				yield chunk
-				callback()
-			}
-		})()
-	)
+	const input = (async function* (): AsyncGenerator<I, void, void> {
+		while (true) {
+			await waitForChunk()
+			if (!chunks.length) return
+			const [chunk, callback] = chunks[0]
+			chunks.shift()
+			yield chunk
+			callback()
+		}
+	})()
+	const w = generator(input)
 
 	const options: DuplexOptions = {
 		objectMode: true,
 		write(chunk: I, encoding: BufferEncoding | string, callback: (error?: Error | null) => void) {
-			chunkListener.emit('chunk')
 			chunks.push([chunk, callback])
+			chunkListener.emit('chunk')
+		},
+		final(this: Writable, callback: (error?: Error | null) => void) {
+			chunkListener.emit('chunk')
+			callback()
 		},
 	}
 
@@ -55,7 +61,10 @@ function _toWritable<I, O>(
 			let go = true
 			while (go) {
 				const { done, value } = await w.next()
-				if (done) break
+				if (done) {
+					this.push(null)
+					break
+				}
 				go = this.push(value)
 			}
 		}
@@ -64,17 +73,19 @@ function _toWritable<I, O>(
 	return new Constructor(options)
 }
 
-const r = toReadable(async function* () {
+async function* source() {
 	yield 'hello'
 	yield 'world'
-})
+	yield* ['a', 'b']
+}
 
-const w = toDuplex<string, string>(async function* (r) {
-	for await (const x of r) yield x.toUpperCase()
-})
+async function* transform(input: AsyncGenerator<string>) {
+	for await (const x of input) yield x.toUpperCase()
+}
 
-const z = toWritable(async function* (r) {
-	for await (const x of r) console.log(x)
-})
+async function* sink(input: AsyncGenerator<string>) {
+	for await (const x of input) console.log(x)
+}
 
-r.pipe(w).pipe(z)
+readable(source).pipe(duplex(transform)).pipe(writable(sink))
+// TODO: Method to pipe many after each other, auto wrapping the generators
