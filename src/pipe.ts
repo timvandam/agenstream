@@ -1,12 +1,12 @@
 import { Duplex, DuplexOptions, Readable, Writable } from 'readable-stream'
-import { EventEmitter } from 'events'
+import RemoteControlAsyncIterable from './RemoteControlAsyncIterable'
 
 type AGConstructor<P, T = never> = P extends undefined
 	? () => AsyncGenerator<T, void, void>
 	: (input: P) => AsyncGenerator<T, void, void>
 
 export type ReadableConstructor<O> = AGConstructor<undefined, O>
-export type WritableConstructor<I, O = never> = AGConstructor<ReturnType<ReadableConstructor<I>>, O>
+export type WritableConstructor<I, O = never> = AGConstructor<AsyncIterable<I>, O>
 
 export function readable<I>(generator: ReadableConstructor<I>): Readable {
 	return Readable.from(generator()) as Readable
@@ -24,34 +24,17 @@ function _toWritable<I, O>(
 	generator: WritableConstructor<I, O>,
 	Constructor = Writable
 ): InstanceType<typeof Constructor> {
-	const chunks: [I, Function][] = []
-	const chunkListener = new EventEmitter()
-	const waitForChunk = () =>
-		new Promise<void>((resolve) => {
-			if (chunks.length) return resolve()
-			chunkListener.once('chunk', resolve)
-		})
-
-	const input = (async function* (): AsyncGenerator<I, void, void> {
-		while (true) {
-			await waitForChunk()
-			if (!chunks.length) return
-			const [chunk, callback] = chunks[0]
-			chunks.shift()
-			yield chunk
-			callback()
-		}
-	})()
-	const w = generator(input)
+	const input = new RemoteControlAsyncIterable<I>()
+	const w = generator(input[Symbol.asyncIterator]())
 
 	const options: DuplexOptions = {
 		objectMode: true,
-		write(chunk: I, encoding: BufferEncoding | string, callback: (error?: Error | null) => void) {
-			chunks.push([chunk, callback])
-			chunkListener.emit('chunk')
+		async write(chunk: I, encoding: BufferEncoding | string, callback: (error?: Error | null) => void) {
+			await input.yield(chunk)
+			callback()
 		},
-		final(this: Writable, callback: (error?: Error | null) => void) {
-			chunkListener.emit('chunk')
+		async final(this: Writable, callback: (error?: Error | null) => void) {
+			await input.end()
 			callback()
 		},
 	}
@@ -79,11 +62,11 @@ async function* source() {
 	yield* ['a', 'b']
 }
 
-async function* transform(input: AsyncGenerator<string>) {
+async function* transform(input: AsyncIterable<string>) {
 	for await (const x of input) yield x.toUpperCase()
 }
 
-async function* sink(input: AsyncGenerator<string>) {
+async function* sink(input: AsyncIterable<string>) {
 	for await (const x of input) console.log(x)
 }
 
