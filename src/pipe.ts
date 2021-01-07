@@ -22,25 +22,25 @@ export function duplex<I, O>(generator: WritableConstructor<I, O>): Duplex {
 
 function _toWritable<I, O>(
 	generator: WritableConstructor<I, O>,
-	Constructor = Writable
+	Constructor: typeof Writable | typeof Duplex = Writable
 ): InstanceType<typeof Constructor> {
 	const input = new RemoteControlledAsyncIterable<I>()
 	const w = generator(input[Symbol.asyncIterator]())
 
-	const options: DuplexOptions = {
+	const writable = new Constructor(<DuplexOptions>{
 		objectMode: true,
 		async write(chunk: I, encoding: BufferEncoding | string, callback: (error?: Error | null) => void) {
 			await input.yield(chunk)
 			callback()
 		},
-		async final(this: Writable, callback: (error?: Error | null) => void) {
+		async final(callback: (error?: Error | null) => void) {
 			await input.end()
 			callback()
 		},
-	}
-
-	if (Constructor === Duplex) {
-		options.read = async function (this: Duplex) {
+		/**
+		 * Support for readable end of a duplex stream
+		 */
+		async read(this: Duplex) {
 			let go = true
 			while (go) {
 				const { done, value } = await w.next()
@@ -50,10 +50,16 @@ function _toWritable<I, O>(
 				}
 				go = this.push(value)
 			}
-		}
-	} else w.next()
+		},
+	})
 
-	return new Constructor(options)
+	/**
+	 * If this stream is not a duplex stream then pull flow towards the sink.
+	 * A duplex stream would do this whenever being read. Writable is not read so we can just instantly start it.
+	 */
+	if (Constructor !== Duplex) w.next()
+
+	return writable
 }
 
 async function* source() {
