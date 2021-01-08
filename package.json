@@ -1,5 +1,5 @@
 {
-	"name": "asyncstream",
+	"name": "agenstream",
 	"version": "1.0.0",
 	"scripts": {
 		"build": "tsc -b",
@@ -7,7 +7,7 @@
 	},
 	"main": "build/index.js",
 	"types": "build/types",
-	"repository": "git@github.com:timvandam/asyncstream.git",
+	"repository": "git@github.com:timvandam/agenstream.git",
 	"author": "Tim van Dam <timvandamcs@gmail.com>",
 	"license": "MIT",
 	"devDependencies": {
