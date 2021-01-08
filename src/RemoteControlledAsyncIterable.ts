@@ -14,7 +14,7 @@ export default class RemoteControlledAsyncIterable<T> implements AsyncIterable<T
 	 * @returns Promise that resolves once this yield has been consumed
 	 */
 	public yield(thing: T): Promise<void> {
-		return this.enqueueChunk(thing)
+		return this.enqueue(thing)
 	}
 
 	/**
@@ -22,60 +22,59 @@ export default class RemoteControlledAsyncIterable<T> implements AsyncIterable<T
 	 * @returns Promise that resolves once the iterator has closed
 	 */
 	public end(): Promise<void> {
-		return this.enqueueChunk(RemoteControlledAsyncIterable.end)
+		return this.enqueue(RemoteControlledAsyncIterable.end)
 	}
 
 	/**
-	 * Emits an event indicating that all chunk queues must add this chunk to the queue
-	 * @param chunk The chunk or End symbol to add to the queue
-	 * @returns Promise that resolves once the enqueued chunk has been consumed
+	 * Emits an event indicating that all queues must add this element to the queue
+	 * @param element The element or end symbol to add to the queue
+	 * @returns Promise that resolves once the enqueued element has been consumed
 	 */
-	private enqueueChunk(chunk: T | typeof RemoteControlledAsyncIterable.end): Promise<void> {
+	private enqueue(element: T | typeof RemoteControlledAsyncIterable.end): Promise<void> {
 		return new Promise((resolve) => {
-			this.events.emit('chunk', [chunk, resolve])
+			this.events.emit('element', [element, resolve])
 		})
 	}
 
 	/**
-	 * Returns a promise that resolves when there is a chunk available.
+	 * Returns a promise that resolves when there is an element available.
 	 * @private
 	 */
-	private get chunkIsAvailable(): Promise<void> {
+	private get elementIsAvailable(): Promise<void> {
 		return new Promise((resolve) => {
-			this.events.once('chunk', () => resolve())
+			this.events.once('element', () => resolve())
 		})
 	}
 
 	async *[Symbol.asyncIterator](): AsyncGenerator<T> {
-		// Keep a local copy of the chunk queue to allow
-		const chunkQueue: ChunkQueueElement<T | typeof RemoteControlledAsyncIterable.end>[] = []
-		const populateChunkQueue: ChunkListener<T | typeof RemoteControlledAsyncIterable.end> = (chunk) =>
-			chunkQueue.push(chunk)
-		this.events.on('chunk', populateChunkQueue)
+		// Keep track of the element queue here. (this can't be done in the class as multiple iterations might happen)
+		const queue: QueueEntry<T | typeof RemoteControlledAsyncIterable.end>[] = []
+		const populateQueue: ElementListener<T | typeof RemoteControlledAsyncIterable.end> = (entry) => queue.push(entry)
+		this.events.on('element', populateQueue)
 
 		while (true) {
-			// Wait until there are chunks available
-			if (!chunkQueue.length) await this.chunkIsAvailable
-			// Handle the chunks
-			const [chunk, callback] = chunkQueue.shift() as ChunkQueueElement<T | typeof RemoteControlledAsyncIterable.end>
-			if (chunk === RemoteControlledAsyncIterable.end) {
-				callback()
+			// Wait until a new element is available
+			if (!queue.length) await this.elementIsAvailable
+			// Handle an element
+			const [element, resolve] = queue.shift() as QueueEntry<T | typeof RemoteControlledAsyncIterable.end>
+			if (element === RemoteControlledAsyncIterable.end) {
+				resolve()
 				break
 			}
-			yield chunk
-			callback()
+			yield element
+			resolve()
 		}
-		this.events.off('chunk', populateChunkQueue)
+		this.events.off('element', populateQueue)
 	}
 }
 
 interface RemoteControlAsyncIterableEvents<T> {
-	once(eventName: 'chunk', listener: ChunkListener<T>): this
-	on(eventName: 'chunk', listener: ChunkListener<T>): this
-	emit(eventName: 'chunk', params: ChunkQueueElement<T>): boolean
-	off(eventName: 'chunk', listener: ChunkListener<T>): this
+	once(eventName: 'element', listener: ElementListener<T>): this
+	on(eventName: 'element', listener: ElementListener<T>): this
+	emit(eventName: 'element', params: QueueEntry<T>): boolean
+	off(eventName: 'element', listener: ElementListener<T>): this
 }
 
-type ChunkListener<T> = (chunk: ChunkQueueElement<T>) => void
-type Callback = () => void
-type ChunkQueueElement<T> = [chunk: T, callback: Callback]
+type ElementListener<T> = (entry: QueueEntry<T>) => void
+type Resolve = () => void
+type QueueEntry<T> = [element: T, resolve: Resolve]

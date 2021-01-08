@@ -9,6 +9,8 @@ export type ReadableConstructor<O> = AsyncGeneratorConstructor<undefined, O>
 export type WritableConstructor<I> = AsyncGeneratorConstructor<AsyncIterable<I>>
 export type DuplexConstructor<I, O> = AsyncGeneratorConstructor<AsyncIterable<I>, O>
 
+// TODO: Browser support
+
 export function readable<I>(generator: ReadableConstructor<I>): Readable {
 	return Readable.from(generator()) as Readable
 }
