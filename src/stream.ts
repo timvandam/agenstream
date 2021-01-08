@@ -9,20 +9,35 @@ export type ReadableConstructor<O> = AsyncGeneratorConstructor<undefined, O>
 export type WritableConstructor<I> = AsyncGeneratorConstructor<AsyncIterable<I>>
 export type DuplexConstructor<I, O> = AsyncGeneratorConstructor<AsyncIterable<I>, O>
 
-// TODO: Browser support
-
+/**
+ * Create a Readable from an Async Generator
+ * @param generator Async Generator to use as Readable stream
+ */
 export function readable<I>(generator: ReadableConstructor<I>): Readable {
 	return Readable.from(generator()) as Readable
 }
 
+/**
+ * Create a Writable from an Async Generator
+ * @param generator Async Generator to use as Writable stream
+ */
 export function writable<I>(generator: WritableConstructor<I>): Writable {
 	return _toWritable(generator, Writable)
 }
 
+/**
+ * Create a Duplex from an Async Generator
+ * @param generator Async Generator to use as Duplex stream
+ */
 export function duplex<I, O>(generator: DuplexConstructor<I, O>): Duplex {
 	return _toWritable(generator, Duplex) as Duplex
 }
 
+/**
+ * Converts an Async Generator into a Writable or Duplex stream.
+ * @param generator Async Generator to use as Writable/Duplex
+ * @param Constructor Stream Constructor. Should be either Writable or Duplex
+ */
 function _toWritable<I, O>(
 	generator: WritableConstructor<I> | DuplexConstructor<I, O>,
 	Constructor: typeof Writable | typeof Duplex = Writable

@@ -9,7 +9,7 @@ export type Pipe<Start, Finish, Inputs extends [Start, ...unknown[]], Outputs ex
 
 /**
  * Creates a pipe of Readable, Duplex and Writable streams. Returns the last Writable.
- * @param streams List of async generator streams to pipe.
+ * @param streams List of Async Generator streams to pipe.
  */
 export function pipe<F, L, P extends [F, ...unknown[]]>(
 	...streams: [ReadableConstructor<F>, ...Pipe<F, L, P>, WritableConstructor<L>]

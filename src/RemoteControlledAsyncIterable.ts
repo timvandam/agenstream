@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
 
 /**
- * Class that can be used
+ * Class that can be used to remotely control an async iterator.
  */
 export default class RemoteControlledAsyncIterable<T> implements AsyncIterable<T> {
 	// Symbol used to the the iterable
