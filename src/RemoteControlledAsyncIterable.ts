@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events'
 
+/**
+ * Class that can be used
+ */
 export default class RemoteControlledAsyncIterable<T> implements AsyncIterable<T> {
 	// Symbol used to the the iterable
 	private static readonly end: unique symbol = Symbol('end')

@@ -1,13 +1,17 @@
 import { duplex, DuplexConstructor, readable, ReadableConstructor, writable, WritableConstructor } from './stream'
 import { Writable } from 'readable-stream'
 
-export type OmitFirst<T extends any[]> = T extends [any, ...infer R] ? R : never
+export type OmitFirst<T extends unknown[]> = T extends [unknown, ...infer R] ? R : never
 export type GetValueOrDefault<Thing, Key, Default = never> = Key extends keyof Thing ? Thing[Key] : Default
-export type Pipe<Start, Finish, Inputs extends [Start, ...any[]], Outputs extends any[] = OmitFirst<Inputs>> = {
+export type Pipe<Start, Finish, Inputs extends [Start, ...unknown[]], Outputs extends unknown[] = OmitFirst<Inputs>> = {
 	[I in keyof Inputs]: DuplexConstructor<Inputs[I], GetValueOrDefault<Outputs, I, Finish>>
 }
 
-export function pipe<F, L, P extends [F, ...any[]]>(
+/**
+ * Creates a pipe of Readable, Duplex and Writable streams. Returns the last Writable.
+ * @param streams List of async generator streams to pipe.
+ */
+export function pipe<F, L, P extends [F, ...unknown[]]>(
 	...streams: [ReadableConstructor<F>, ...Pipe<F, L, P>, WritableConstructor<L>]
 ): Writable {
 	const source = streams[0]
